@@ -1,62 +1,46 @@
 import requests
-import datetime as dt
-import smtplib
-import time
+from twilio.rest import Client
+import os
 
-# Location Constants
-LATITUDE = 22.7196
-LONGITUDE = 75.8577
+# Load credentials from environment variables
+Latitude = 24.530727
+Longitude = 81.299110
+api_key = os.getenv("WEATHER_API_KEY")
+account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+twilio_phone_number = os.getenv("TWILIO_PHONE_NUMBER")
+my_phone_number = os.getenv("MY_PHONE_NUMBER")
 
-# Email Constants
-email = "harsxit04@gmail.com"
-password = "fkzd ghcg drzi odod"
+# Set parameters for the API request
+parameters = {
+  "lat": Latitude, 
+  "lon": Longitude, 
+  "appid": api_key, 
+  "cnt": 9
+}
 
-def iss_overhead():
-    response = requests.get(url="http://api.open-notify.org/iss-now.json")
-    response.raise_for_status()
-    data = response.json()
+# Make a request to the weather API
+response = requests.get(url="https://api.openweathermap.org/data/2.5/forecast?", params=parameters)
+response.raise_for_status()
+data = response.json()
 
-    iss_latitude = float(data["iss_position"]["latitude"])
-    iss_longitude = float(data["iss_position"]["longitude"])
+will_rain = False
 
-    if LATITUDE - 5 <= iss_latitude <= LATITUDE + 5 and LONGITUDE - 5 <= iss_longitude <= LONGITUDE + 5:
-        return True
-    return False
+# Check weather conditions
+for hour_data in data["list"]:
+    condition = hour_data["weather"][0]["id"]
+    if int(condition) < 700:
+        will_rain = True
+        break
 
-def is_night():
-    parameters = {
-        "lat": LATITUDE,
-        "lng": LONGITUDE,
-        "formatted": 0,
-    }
-
-    response = requests.get(url="https://api.sunrise-sunset.org/json", params=parameters)
-    response.raise_for_status()
-    data = response.json()
-
-    sunrise = int(data["results"]["sunrise"].split("T")[1].split(":")[0])
-    sunset = int(data["results"]["sunset"].split("T")[1].split(":")[0])
-
-    time_now = dt.datetime.now().hour
-
-    if time_now >= sunset or time_now <= sunrise:
-        return True
-    return False
-
-while True:
-    time.sleep(60)
-    if iss_overhead() and is_night():
-        try:
-            with smtplib.SMTP("smtp.gmail.com") as connection:
-                connection.starttls()
-                connection.login(email, password)
-                connection.sendmail(
-                    from_addr=email,
-                    to_addrs=email,
-                    msg="Subject:Look Up\n\nInternational Space Station is overhead, look up in the sky."
-                )
-            print("Email Sent")
-        except Exception as e:
-            print("Email Not Sent", e)
-    else:
-        print("Conditions not met or ISS not overhead")
+# Send SMS notification if it will rain
+client = Client(account_sid, auth_token)
+if will_rain:
+    client.messages.create(
+        body="It is going to rain today. Remember to bring an umbrella☂️",
+        from_=twilio_phone_number,
+        to=my_phone_number  # Ensure this is in E.164 format
+    )
+    print("Message sent successfully")
+else:
+    print("Weather is clear")
